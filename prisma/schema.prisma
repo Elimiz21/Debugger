@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id             Int       @id @default(autoincrement())
+  userId         String    @db.Uuid
+  repoUrl        String
+  appUrl         String?
+  supabaseKey    String?
+  vercelKey      String?
+  otherApiKeys   String?
+  bugDescription String
+  createdAt      DateTime  @default(now())
+  sessions       Session[]
+
+  @@index([userId])
+}
+
+model Session {
+  id         Int       @id @default(autoincrement())
+  projectId  Int
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  messages   Message[]
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  sessionId Int
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+}
