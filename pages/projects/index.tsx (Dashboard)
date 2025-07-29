@@ -1,0 +1,84 @@
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { useRouter } from "next/router";
+import Link from "next/link";
+
+interface Project {
+  id: number;
+  repoUrl: string;
+  bugDescription: string;
+  createdAt: string;
+}
+
+export default function ProjectList() {
+  const router = useRouter();
+  const [projects, setProjects] = useState<Project[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) router.replace("/");
+      else {
+        try {
+          const res = await fetch("/api/projects", {
+            headers: { Authorization: `Bearer ${session.access_token}` }
+          });
+          if (!res.ok) throw new Error(res.statusText);
+          const { projects } = await res.json();
+          setProjects(projects);
+        } catch (err: any) {
+          setErrorMsg(err.message);
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
+  }, [router]);
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    router.replace("/");
+  };
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">
+      Loading projects...
+    </div>;
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Your Projects</h1>
+        <div>
+          <button onClick={logout} className="mr-4 text-sm text-gray-600 underline">
+            Logout
+          </button>
+          <Link href="/projects/new" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+            New Project
+          </Link>
+        </div>
+      </div>
+      {errorMsg && <div className="text-red-600 mb-4">{errorMsg}</div>}
+      {projects && projects.length > 0 ? (
+        <div className="space-y-4">
+          {projects.map(proj => (
+            <div key={proj.id} className="p-4 bg-white rounded shadow">
+              <h2 className="text-lg font-semibold">{proj.repoUrl}</h2>
+              <p className="text-gray-700 mb-2">{proj.bugDescription}</p>
+              <p className="text-sm text-gray-500 mb-2">
+                Created: {new Date(proj.createdAt).toLocaleString()}
+              </p>
+              <Link href={`/projects/${proj.id}`} className="text-blue-600 hover:underline">
+                Open Debug Session &rarr;
+              </Link>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p>No projects found. Click "New Project" to create one.</p>
+      )}
+    </div>
+  );
+}
