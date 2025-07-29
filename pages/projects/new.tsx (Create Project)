@@ -1,0 +1,136 @@
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { useRouter } from "next/router";
+
+export default function NewProject() {
+  const router = useRouter();
+  const [repoUrl, setRepoUrl] = useState("");
+  const [appUrl, setAppUrl] = useState("");
+  const [supabaseKey, setSupabaseKey] = useState("");
+  const [vercelKey, setVercelKey] = useState("");
+  const [otherApiKeys, setOtherApiKeys] = useState("");
+  const [bugDescription, setBugDescription] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) router.replace("/");
+    });
+  }, [router]);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg("");
+    if (!repoUrl || !bugDescription) {
+      setErrorMsg("Repository URL and bug description are required.");
+      return;
+    }
+    setLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setErrorMsg("You must be logged in.");
+      setLoading(false);
+      return;
+    }
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          repoUrl, appUrl, supabaseKey, vercelKey, otherApiKeys, bugDescription
+        })
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      const { projectId } = await res.json();
+      router.push(`/projects/${projectId}`);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to create project.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+      <div className="w-full max-w-lg bg-white p-6 rounded shadow">
+        <h1 className="text-2xl font-bold mb-4">New Project</h1>
+        {errorMsg && <div className="text-red-600 mb-4">{errorMsg}</div>}
+        <form onSubmit={onSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">GitHub Repo URL</label>
+            <input
+              type="url"
+              className="w-full border rounded px-3 py-2"
+              value={repoUrl}
+              onChange={e => setRepoUrl(e.target.value)}
+              placeholder="https://github.com/user/repo"
+              required
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">App URL (optional)</label>
+            <input
+              type="url"
+              className="w-full border rounded px-3 py-2"
+              value={appUrl}
+              onChange={e => setAppUrl(e.target.value)}
+              placeholder="https://your-app-url.com"
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">Supabase Key (optional)</label>
+            <input
+              type="text"
+              className="w-full border rounded px-3 py-2"
+              value={supabaseKey}
+              onChange={e => setSupabaseKey(e.target.value)}
+              placeholder="Supabase API key"
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">Vercel Key (optional)</label>
+            <input
+              type="text"
+              className="w-full border rounded px-3 py-2"
+              value={vercelKey}
+              onChange={e => setVercelKey(e.target.value)}
+              placeholder="Vercel API key"
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">Other API Keys (optional)</label>
+            <input
+              type="text"
+              className="w-full border rounded px-3 py-2"
+              value={otherApiKeys}
+              onChange={e => setOtherApiKeys(e.target.value)}
+              placeholder="Any other API keys"
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">Bug Description</label>
+            <textarea
+              className="w-full border rounded px-3 py-2"
+              value={bugDescription}
+              onChange={e => setBugDescription(e.target.value)}
+              placeholder="Describe the bug..."
+              rows={4}
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
+            disabled={loading}
+          >
+            {loading ? "Creating..." : "Create Project"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
