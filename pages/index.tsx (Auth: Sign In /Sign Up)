@@ -1,14 +1,17 @@
+cat > pages/index.tsx <<'TSX'
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/router";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function Home() {
   const router = useRouter();
   const [isSignUp, setIsSignUp] = useState(false);
+  const [awaitingConfirm, setAwaitingConfirm] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [infoMsg, setInfoMsg] = useState("");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -16,28 +19,46 @@ export default function Home() {
     });
   }, [router]);
 
+  const emailRedirectTo = `${typeof window !== "undefined" ? window.location.origin : ""}/auth/callback`;
+
   const handleSignIn = async () => {
-    setErrorMsg("");
+    setErrorMsg(""); setInfoMsg("");
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) setErrorMsg(error.message);
     else router.replace("/projects");
   };
 
   const handleSignUp = async () => {
-    setErrorMsg("");
+    setErrorMsg(""); setInfoMsg("");
     if (password !== confirmPassword) {
       setErrorMsg("Passwords do not match");
       return;
     }
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) setErrorMsg(error.message);
-    else if (data.session) router.replace("/projects");
-    else setErrorMsg("Check your email to confirm account.");
+    const { data, error } = await supabase.auth.signUp({
+      email, password,
+      options: { emailRedirectTo }
+    });
+    if (error) { setErrorMsg(error.message); return; }
+
+    // If email confirmation is required, Supabase will not create a session yet.
+    if (!data.session) {
+      setAwaitingConfirm(email);
+      setInfoMsg("Signup successful. Check your email for the confirmation link.");
+      return;
+    }
+    router.replace("/projects");
   };
 
-  const handleOAuthLogin = async (provider: "google" | "github") => {
-    const { error } = await supabase.auth.signInWithOAuth({ provider });
+  const handleResend = async () => {
+    setErrorMsg(""); setInfoMsg("");
+    if (!awaitingConfirm) { setErrorMsg("No email to resend to."); return; }
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: awaitingConfirm,
+      options: { emailRedirectTo }
+    });
     if (error) setErrorMsg(error.message);
+    else setInfoMsg("Confirmation email resent. Please check your inbox.");
   };
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -51,7 +72,10 @@ export default function Home() {
         <h1 className="text-2xl font-bold mb-4 text-center">
           {isSignUp ? "Sign Up" : "Sign In"}
         </h1>
+
         {errorMsg && <div className="text-red-600 mb-3 text-center">{errorMsg}</div>}
+        {infoMsg && <div className="text-green-600 mb-3 text-center">{infoMsg}</div>}
+
         <form onSubmit={onSubmit}>
           <div className="mb-4">
             <label className="block text-sm font-medium mb-1">Email</label>
@@ -75,9 +99,7 @@ export default function Home() {
           </div>
           {isSignUp && (
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-1">
-                Confirm Password
-              </label>
+              <label className="block text-sm font-medium mb-1">Confirm Password</label>
               <input
                 type="password"
                 className="w-full border rounded px-3 py-2"
@@ -87,6 +109,7 @@ export default function Home() {
               />
             </div>
           )}
+
           <button
             type="submit"
             className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
@@ -94,12 +117,14 @@ export default function Home() {
             {isSignUp ? "Sign Up" : "Sign In"}
           </button>
         </form>
+
+        {/* Toggle */}
         <div className="text-center mt-4">
           {isSignUp ? (
             <p>
               Already have an account?{" "}
               <button
-                onClick={() => { setIsSignUp(false); setErrorMsg(""); }}
+                onClick={() => { setIsSignUp(false); setErrorMsg(""); setInfoMsg(""); }}
                 className="text-blue-600 underline"
               >
                 Sign In
@@ -109,7 +134,7 @@ export default function Home() {
             <p>
               No account?{" "}
               <button
-                onClick={() => { setIsSignUp(true); setErrorMsg(""); }}
+                onClick={() => { setIsSignUp(true); setErrorMsg(""); setInfoMsg(""); }}
                 className="text-blue-600 underline"
               >
                 Sign Up
@@ -117,23 +142,23 @@ export default function Home() {
             </p>
           )}
         </div>
-        <hr className="my-6" />
-        <div className="text-center">
-          <p className="mb-2 text-sm text-gray-600">Or sign in with:</p>
-          <button
-            onClick={() => handleOAuthLogin("google")}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded mr-2"
-          >
-            Google
-          </button>
-          <button
-            onClick={() => handleOAuthLogin("github")}
-            className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded"
-          >
-            GitHub
-          </button>
-        </div>
+
+        {/* Resend confirmation */}
+        {awaitingConfirm && (
+          <div className="mt-4 p-3 border rounded bg-gray-50">
+            <p className="text-sm mb-2">
+              Didn’t get the confirmation email for <strong>{awaitingConfirm}</strong>?
+            </p>
+            <button
+              onClick={handleResend}
+              className="text-blue-600 underline"
+            >
+              Resend confirmation email
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
+TSX
